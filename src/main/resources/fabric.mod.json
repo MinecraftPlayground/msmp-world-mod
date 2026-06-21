@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "msmp-world",
+  "version": "${version}",
+  "name": "MSMP World",
+  "description": "Extends the Minecraft Server Management Protocol (MSMP) by providing additional functions for getting and setting world data",
+  "authors": [],
+  "contact": {},
+  "license": "LGPL-3.0-only",
+  "icon": "assets/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "dev.loat.msmp_world.MSMPWorld"
+    ]
+  },
+  "mixins": [
+    "msmp_world.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "^${minecraft_version}"
+  },
+  "custom": {
+    "mc-publish": {
+      "modrinth": {
+        "project_id": "KoGT0iGr",
+        "loaders": [
+          "fabric"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,142 @@
+name: 'New Method/Notification Suggestion'
+description: Suggest a new MSMP RPC method or notification, along with the functionality it should provide.
+title: '[Suggestion] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a new method/notification!
+
+        Please follow the existing naming and structure conventions where possible, ex.:
+        - `world:foo` - get current state
+        - `world:foo/set` - partially update state
+        - `world:foo/changed`, `world:foo/changed/add`, `world:foo/changed/remove` - manage the notification tracker
+        - `world:notification/foo/changed` - the actual pushed event
+
+        You don't need to fill out every field perfectly - just give us as much detail as you can.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 'What are you suggesting?'
+      description: |
+        Methods are request/response (called by the client). Notifications are pushed by the server when something happens.
+
+      options:
+        - 'New method (request/response)'
+        - 'New notification (server-pushed event)'
+        - 'Both a method and a matching notification'
+        - 'Not sure/something else'
+
+    validations:
+      required: true
+
+  - type: textarea
+    id: kind-other
+    attributes:
+      label: 'If "Not sure/something else" - please elaborate'
+      description: |
+        Leave this empty if it doesn't apply to you.
+
+      placeholder: ex. a config option, a change to an existing method, something else entirely...
+
+    validations:
+      required: false
+  
+  - type: textarea
+    id: use-case
+    attributes:
+      label: 'Use Case'
+      description: |
+        Why do you want this? What benefit would that have for you? What tooling, dashboard, or automation would this enable?
+
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: 'Proposed Name'
+      description: |
+        Follow the existing naming convention if this fits an existing family (ex. foo, bar, bazz).
+
+      placeholder: 'world:foo, world:bar, world:bazz, ...'
+
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 'What should it do?'
+      description: |
+        Describe the functionality in detail. What data does it return or accept? Or, for a notification, what event does it represent and when should it fire?
+
+      placeholder: |
+        - `world:foo` - Get current state of foo
+        - `world:foo/set` - Set current state of foo
+        - `world:foo/changed` - Returns a list of all tracked entities for the foo changed event
+        - `world:foo/changed/add` - Add entities to the foo change notification tracker
+        - `world:foo/changed/remove` - Remove entities from the foo change notification tracker
+
+    validations:
+      required: true
+
+  - type: textarea
+    id: example-payload
+    attributes:
+      label: 'Example request/response/notification payload'
+      render: json
+      description: |
+        If you have an idea of the JSON shape, share it here. Not required, but it helps a lot.
+      
+      placeholder: |
+        {
+          "jsonrpc": "2.0",
+          "method": "world:foo/set",
+          "params": [{
+            "name": "Steve",
+            "foo": 15
+          }],
+          "id": 1
+        }
+
+    validations:
+      required: false
+
+  - type: textarea
+    id: related
+    attributes:
+      label: 'Related existing methods or notifications'
+      description: |
+        Is there a similar existing method/notification this should be modeled after (ex. `world:foo/changed`, `world:foo/set`)?
+
+    validations:
+      required: false
+
+  - type: dropdown
+    id: needs-config
+    attributes:
+      label: 'Would this need configurable settings?'
+      description: |
+        Some change-notifications use polling with a configurable interval/threshold (ex. position's `block-delta`), while others are purely event-driven with no settings.
+
+      options:
+        - 'No, it should just work without configuration'
+        - 'Yes, it would need some configurable settings'
+        - 'Not sure'
+
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 'Checks'
+      options:
+        - label: "I searched existing issues and this hasn't been suggested yet"
+          required: true
+
+        - label: 'This is a request for this mod specifically (not Minecraft itself or another mod)'
+          required: false

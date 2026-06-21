@@ -1,0 +1,50 @@
+name: 'Publish Mod'
+
+env:
+  ARTIFACT_NAME: 'msmp_console'
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    permissions:
+      contents: write
+
+    name: 'Build'
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    needs: ['build']
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout Repository'
+        uses: actions/checkout@v4
+
+      - name: 'Download Artifact'
+        uses: actions/download-artifact@v4
+        with:
+          path: './artifacts'
+          name: '${{ env.ARTIFACT_NAME }}'
+      
+      - name: 'Read Minecraft Version'
+        id: read_version
+        run: |
+          minecraft_version=$(grep 'minecraft_version' gradle.properties | cut -d '=' -f2 | tr -d ' ')
+          echo "Minecraft version: $minecraft_version"
+          echo "MINECRAFT_VERSION=$minecraft_version" >> $GITHUB_OUTPUT
+      
+      - name: 'Publish to Modrinth'
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: |
+            ./artifacts/*.jar
+
+          name: ${{ github.event.repository.name }}
+          version: ${{ github.event.release.tag_name }}
+          version-type: ${{ github.event.release.prerelease && 'beta' || 'release' }}
+          changelog: ${{ github.event.release.body }}
+          game-versions: |
+            ${{ steps.read_version.outputs.MINECRAFT_VERSION }}
