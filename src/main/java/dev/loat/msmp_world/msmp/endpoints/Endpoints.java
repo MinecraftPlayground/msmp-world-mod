@@ -2,6 +2,11 @@ package dev.loat.msmp_world.msmp.endpoints;
 
 import dev.loat.msmp.MSMPNamespace;
 import dev.loat.msmp.MSMPServer;
+import dev.loat.msmp_world.msmp.endpoints.block.Block;
+import dev.loat.msmp_world.msmp.endpoints.block.BlockSet;
+import dev.loat.msmp_world.msmp.endpoints.chunk.surface.ChunkSurface;
+import dev.loat.msmp_world.msmp.endpoints.chunk.surface.ChunkSurfaceSet;
+import dev.loat.msmp_world.msmp.endpoints.path_find.PathFind;
 
 import java.util.function.Supplier;
 
@@ -21,6 +26,12 @@ public class Endpoints {
      * @param msmpServer A supplier for the MSMPServer instance, used by some endpoints to subscribe to server events
      */
     public static void register(MSMPNamespace namespace, Supplier<MSMPServer> msmpServer) {
-        // MSMP world endpoint registers
+        Block.register(namespace);
+        BlockSet.register(namespace);
+
+        ChunkSurface.register(namespace);
+        ChunkSurfaceSet.register(namespace);
+
+        PathFind.register(namespace);
     }
 }
