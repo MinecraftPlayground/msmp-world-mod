@@ -87,13 +87,13 @@ Returns the surface block of each of the 256 columns (16×16) of a chunk, using 
 
 ```json
 // Request
-{ "dimension": "minecraft:overworld", "chunk": [6, -2], "heightmap": "MOTION_BLOCKING_NO_LEAVES" }
+{ "dimension": "minecraft:overworld", "chunk": [6, -2], "heightMap": "MOTION_BLOCKING_NO_LEAVES" }
 
 // Response (excerpt - heights/blocks always have exactly 256 entries)
 {
   "dimension": "minecraft:overworld",
   "chunk": [6, -2],
-  "heightmap": "MOTION_BLOCKING_NO_LEAVES",
+  "heightMap": "MOTION_BLOCKING_NO_LEAVES",
   "palette": [
     { "id": "minecraft:grass_block" },
     { "id": "minecraft:water" },
