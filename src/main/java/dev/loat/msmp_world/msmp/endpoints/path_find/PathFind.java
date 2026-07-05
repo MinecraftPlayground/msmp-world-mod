@@ -3,6 +3,7 @@ package dev.loat.msmp_world.msmp.endpoints.path_find;
 import dev.loat.msmp.MSMPNamespace;
 import dev.loat.msmp_world.logging.Logger;
 import dev.loat.msmp_world.msmp.components.BlockResolver;
+import dev.loat.msmp_world.msmp.components.ChunkResolver;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -165,12 +166,14 @@ public class PathFind {
      * Creates a temporary {@link Villager} as a mob profile for the path finder, computes
      * the path, then discards the entity immediately.
      *
-     * @param level    The level to path find in
+     * @param level The level to path find in
      * @param startPos The starting position
-     * @param endPos   The target position
+     * @param endPos The target position
      * @return The computed {@link Path}, or {@code null} if no path was found
      */
     private static Path computePath(ServerLevel level, BlockPos startPos, BlockPos endPos) {
+        ChunkResolver.preloadChunks(level, startPos, endPos);
+
         Villager entityContainer = EntityType.VILLAGER.create(level, EntitySpawnReason.COMMAND);
         if (entityContainer == null) return null;
 

@@ -21,13 +21,13 @@ This mod is designed for tooling, dashboards, automation systems, map generators
 
 The mod currently provides the following MSMP RPC methods. All of these methods are also automatically discoverable through the standard `rpc.discover` MSMP endpoint.
 
-| Method                    | Description                                                                            |
-| ------------------------- | -------------------------------------------------------------------------------------- |
-| `world:block`             | Returns the block at a given position in a given dimension                             |
-| `world:block/set`         | Sets the block at a given position in a given dimension                                |
-| `world:chunk/surface`     | Returns the surface blocks of a chunk (256 columns) using a compact palette format     |
-| `world:chunk/surface/set` | Bulk-places blocks across all 256 columns of a chunk using a compact palette format    |
-| `world:path_find`         | Computes a path between two positions, simulating a generic player-like ground walker  |
+| Method                    | Description                                                                                       |
+|:--------------------------|:--------------------------------------------------------------------------------------------------|
+| `world:block`             | Returns the block at a given position in a given dimension                                        |
+| `world:block/set`         | Sets the block at a given position in a given dimension                                           |
+| `world:chunk/surface`     | Returns the surface blocks of a chunk (256 columns) using a compact palette format                |
+| `world:chunk/surface/set` | Bulk-places blocks across all 256 columns of a chunk using a compact palette format               |
+| `world:path_find`         | Computes a path between two positions or entities, simulating a generic player-like ground walker |
 
 > If you want more methods or notifications for other purposes, please [open an issue](https://github.com/MinecraftPlayground/msmp-world-mod/issues/new?template=new_method_or_notification_suggesetion.yml)
 
@@ -146,7 +146,7 @@ Replaces the surface block of each column in a chunk. The server determines the 
   "blocks": [0, 0, 0, /* ... 256 entries total */]
 }
 
-// Request - replace ocean floor using a different height map
+// Request - replace ocean floor using a different heightmap
 {
   "dimension": "minecraft:overworld",
   "chunk": [6, -2],
@@ -164,16 +164,43 @@ Validation runs in full before any world mutation - a bad palette entry or inval
 
 ### `world:path_find`
 
-Computes a navigation path between two positions, simulating a generic player-like ground walker (no flying, no swimming). Returns `found: false` when no path exists or the target is unreachable - this is a normal outcome, not an error.
+Computes a navigation path between two targets, simulating a generic player-like ground walker (no flying, no swimming). Returns `found: false` when no path exists or the target is unreachable - this is a normal outcome, not an error.
 
-**Hard distance limit:** requests with a straight-line distance greater than 256 blocks between `start` and `end` are rejected immediately.
+Both `start` and `end` accept either a fixed position or an entity reference (by UUID or player name):
 
 ```jsonc
-// Request
+// Fixed position
+{ "position": [100, 64, 200] }
+
+// Any entity by UUID
+{ "id": "069a79f4-44e9-4726-a5be-fca90e38aaf5" }
+
+// Online player by name
+{ "name": "Steve" }
+```
+
+**Hard distance limit:** requests with a straight-line distance greater than 256 blocks between `start` and `end` are rejected immediately. (This will be configurable in a future version.)
+
+```jsonc
+// Request - position to position
 {
   "dimension": "minecraft:overworld",
-  "start": [100, 64, 200],
-  "end":   [150, 70, 230]
+  "start": { "position": [100, 64, 200] },
+  "end":   { "position": [150, 70, 230] }
+}
+
+// Request - entity to position
+{
+  "dimension": "minecraft:overworld",
+  "start": { "name": "Steve" },
+  "end":   { "position": [150, 70, 230] }
+}
+
+// Request - entity to entity
+{
+  "dimension": "minecraft:overworld",
+  "start": { "name": "Steve" },
+  "end":   { "id": "069a79f4-44e9-4726-a5be-fca90e38aaf5" }
 }
 
 // Response - path found

@@ -9,7 +9,7 @@ import net.minecraft.server.jsonrpc.api.Schema;
  * Request payload for the {@code world:path_find} method.
  *
  * <p>Both {@code start} and {@code end} accept either a fixed position or an entity
- * reference (by UUID or player name) – see {@link PathFindTarget} for details.</p>
+ * reference (by UUID or player name) - see {@link PathFindTarget} for details.</p>
  *
  * <p>Example JSON representations:</p>
  * <pre>{@code
