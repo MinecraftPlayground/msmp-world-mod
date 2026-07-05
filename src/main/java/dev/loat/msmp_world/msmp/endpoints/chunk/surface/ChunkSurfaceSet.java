@@ -102,7 +102,7 @@ public class ChunkSurfaceSet {
                         int localX = ChunkResolver.localX(index);
                         int localZ = ChunkResolver.localZ(index);
                         int rawHeight = chunk.getHeight(heightmapType, localX, localZ);
-                        heights.add(rawHeight <= minY ? ChunkSurface.NO_HEIGHT : rawHeight - 1);
+                        heights.add(rawHeight <= minY ? ChunkSurface.NO_HEIGHT : rawHeight);
                     }
 
                     List<BlockTypeRef> palette = params.palette();
@@ -115,16 +115,16 @@ public class ChunkSurfaceSet {
                     }
 
                     List<BlockEntityRef> blockEntities = params.blockEntities().orElse(List.of());
-                    for (BlockEntityRef ber : blockEntities) {
-                        if (ber.index() < 0 || ber.index() >= 256) {
+                    for (BlockEntityRef blockEntity : blockEntities) {
+                        if (blockEntity.index() < 0 || blockEntity.index() >= 256) {
                             throw new IllegalArgumentException(
-                                "blockEntities references invalid index " + ber.index()
+                                "blockEntities references invalid index " + blockEntity.index()
                             );
                         }
-                        if (blocks.get(ber.index()) == ChunkSurface.NO_PALETTE_INDEX) {
+                        if (blocks.get(blockEntity.index()) == ChunkSurface.NO_PALETTE_INDEX) {
                             throw new IllegalArgumentException(
                                 "blockEntities references index %d, but that column is marked as skipped"
-                                    .formatted(ber.index())
+                                    .formatted(blockEntity.index())
                             );
                         }
                     }
@@ -151,14 +151,14 @@ public class ChunkSurfaceSet {
                     }
 
                     // Pass 3: apply block-entity data, now that every block is placed.
-                    for (BlockEntityRef ber : blockEntities) {
-                        int localX = ChunkResolver.localX(ber.index());
-                        int localZ = ChunkResolver.localZ(ber.index());
-                        int height = heights.get(ber.index());
+                    for (BlockEntityRef blockEntity : blockEntities) {
+                        int localX = ChunkResolver.localX(blockEntity.index());
+                        int localZ = ChunkResolver.localZ(blockEntity.index());
+                        int height = heights.get(blockEntity.index());
                         BlockPos pos = new BlockPos(chunkX * 16 + localX, height, chunkZ * 16 + localZ);
 
-                        String blockId = palette.get(blocks.get(ber.index())).id();
-                        BlockResolver.applyComponents(level, pos, blockId, ber.components());
+                        String blockId = palette.get(blocks.get(blockEntity.index())).id();
+                        BlockResolver.applyComponents(level, pos, blockId, blockEntity.components());
                     }
 
                     return new ChunkSurfaceResponse(

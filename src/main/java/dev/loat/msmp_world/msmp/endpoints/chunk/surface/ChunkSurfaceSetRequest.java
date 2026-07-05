@@ -16,7 +16,7 @@ import java.util.Optional;
  *
  * <p>Replaces the surface block of each column in a chunk. The server determines the
  * placement Y automatically from the current terrain (using the height map specified in
- * {@code heightMap}, defaulting to {@code MOTION_BLOCKING_NO_LEAVES}) – there is no need
+ * {@code heightMap}, defaulting to {@code MOTION_BLOCKING_NO_LEAVES}) - there is no need
  * to supply heights explicitly. To place blocks at a specific Y-coordinate, use
  * {@code world:block/set} instead.</p>
  *
@@ -26,7 +26,7 @@ import java.util.Optional;
  *
  * <p><b>Sentinel value</b> for {@code blocks[i] == -1}: leave this column untouched.</p>
  *
- * <p>Example – paint all surface blocks of a chunk with sand:</p>
+ * <p>Example - paint all surface blocks of a chunk with sand:</p>
  * <pre>{@code
  * {
  *   "dimension": "minecraft:overworld",

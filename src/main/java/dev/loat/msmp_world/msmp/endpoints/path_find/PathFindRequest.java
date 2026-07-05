@@ -4,41 +4,38 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.server.jsonrpc.api.Schema;
 
-import java.util.List;
-
 
 /**
  * Request payload for the {@code world:path_find} method.
  *
- * <p>v0: path finding always simulates a generic, player-like ground walker (no flying,
- * no swimming) - there is no way yet to specify a different mover profile or reference
- * an existing entity.</p>
+ * <p>Both {@code start} and {@code end} accept either a fixed position or an entity
+ * reference (by UUID or player name) – see {@link PathFindTarget} for details.</p>
  *
- * <p>Example JSON representation:</p>
+ * <p>Example JSON representations:</p>
  * <pre>{@code
- * {
- *   "dimension": "minecraft:overworld",
- *   "start": [100, 64, 200],
- *   "end": [150, 70, 230]
- * }
+ * // Position to position
+ * { "dimension": "minecraft:overworld", "start": { "position": [100, 64, 200] }, "end": { "position": [150, 70, 230] } }
+ *
+ * // Entity to position
+ * { "dimension": "minecraft:overworld", "start": { "name": "Steve" }, "end": { "position": [150, 70, 230] } }
+ *
+ * // Entity to entity
+ * { "dimension": "minecraft:overworld", "start": { "name": "Steve" }, "end": { "id": "069a79f4-44e9-4726-a5be-fca90e38aaf5" } }
  * }</pre>
  *
  * @param dimension The dimension's resource key as a string
- * @param start The starting position as {@code [x, y, z]}
- * @param end The target position as {@code [x, y, z]}
+ * @param start The starting target (position or entity)
+ * @param end The ending target (position or entity)
  */
-public record PathFindRequest(String dimension, List<Integer> start, List<Integer> end) {
-
-    private static final Schema<List<Integer>> POSITION_SCHEMA =
-        Schema.ofType("array", Codec.INT.listOf());
+public record PathFindRequest(String dimension, PathFindTarget start, PathFindTarget end) {
 
     /**
      * Codec for serializing and deserializing {@link PathFindRequest} instances.
      */
     public static final Codec<PathFindRequest> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.STRING.fieldOf("dimension").forGetter(PathFindRequest::dimension),
-        Codec.INT.listOf().fieldOf("start").forGetter(PathFindRequest::start),
-        Codec.INT.listOf().fieldOf("end").forGetter(PathFindRequest::end)
+        PathFindTarget.CODEC.fieldOf("start").forGetter(PathFindRequest::start),
+        PathFindTarget.CODEC.fieldOf("end").forGetter(PathFindRequest::end)
     ).apply(i, PathFindRequest::new));
 
     /**
@@ -46,6 +43,6 @@ public record PathFindRequest(String dimension, List<Integer> start, List<Intege
      */
     public static final Schema<PathFindRequest> SCHEMA = Schema.record(CODEC)
         .withField("dimension", Schema.STRING_SCHEMA)
-        .withField("start", POSITION_SCHEMA)
-        .withField("end", POSITION_SCHEMA);
+        .withField("start", PathFindTarget.SCHEMA)
+        .withField("end", PathFindTarget.SCHEMA);
 }

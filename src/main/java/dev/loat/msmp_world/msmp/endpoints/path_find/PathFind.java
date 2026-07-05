@@ -5,7 +5,9 @@ import dev.loat.msmp_world.logging.Logger;
 import dev.loat.msmp_world.msmp.components.BlockResolver;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
@@ -17,53 +19,41 @@ import net.minecraft.world.level.pathfinder.Path;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 
 /**
  * Registers the {@code world:path_find} MSMP method.
  *
  * <p>Computes a path between two positions in a dimension, simulating a generic,
- * player-like ground walker (no flying, no swimming).</p>
+ * player-like ground walker (no flying, no swimming). Both {@code start} and {@code end}
+ * accept either a fixed position or an entity reference (by UUID or player name).</p>
  *
  * <p><b>Implementation approach:</b> Minecraft's pathfinding ({@code PathNavigation}/
  * {@code NodeEvaluator}) is inherently tied to a {@link net.minecraft.world.entity.Mob}
- * instance - there is no entity-free way to invoke it. This works around that by creating
- * a temporary, invisible, silent, invulnerable {@link Villager} purely to carry the mob
- * profile (collision box, movement capabilities) that the pathfinder needs. Crucially,
- * the entity is <b>never added to the world</b> - {@code PathNavigation.createPath()}
- * only reads the entity's profile plus a {@code PathNavigationRegion} built from the
- * level, not the entity's actual presence in it. Villager was chosen over e.g. Zombie
- * because it doesn't catch fire in daylight and matches player width (0.6) exactly.</p>
+ * instance. This works around that by creating a temporary, invisible, silent,
+ * invulnerable {@link Villager} with {@code NoAI} purely to carry the mob profile.
+ * The entity is added to the world, the path computed, and it is immediately discarded
+ * before any tick logic runs. Villager was chosen because it doesn't burn in daylight
+ * and matches player width (0.6) exactly.</p>
  *
- * <p>Example request:</p>
+ * <p>Example requests:</p>
  * <pre>{@code
- * {
- *   "jsonrpc": "2.0",
- *   "id": 1,
- *   "method": "world:path_find",
- *   "params": [{
- *     "dimension": "minecraft:overworld",
- *     "start": [100, 64, 200],
- *     "end": [150, 70, 230]
- *   }]
- * }
- * }</pre>
+ * // Position to position
+ * { "dimension": "minecraft:overworld", "start": { "position": [100, 64, 200] }, "end": { "position": [150, 70, 230] } }
  *
- * <p>Example response:</p>
- * <pre>{@code
- * {
- *   "dimension": "minecraft:overworld",
- *   "found": true,
- *   "path": [[100, 64, 200], [101, 64, 201], ...]
- * }
+ * // Entity to position
+ * { "dimension": "minecraft:overworld", "start": { "name": "Steve" }, "end": { "position": [150, 70, 230] } }
+ *
+ * // Entity to entity
+ * { "dimension": "minecraft:overworld", "start": { "name": "Steve" }, "end": { "id": "069a79f4-44e9-4726-a5be-fca90e38aaf5" } }
  * }</pre>
  */
 public class PathFind {
 
     /**
      * Hard distance limit (straight-line, in blocks) beyond which path finding is rejected
-     * outright, before even attempting the search. Minecraft's path finder is tuned for
-     * short AI ranges, not long-distance route planning.
+     * outright, before even attempting the search.
      */
     private static final double MAX_DISTANCE = 256.0;
 
@@ -77,14 +67,14 @@ public class PathFind {
     public static void register(MSMPNamespace namespace) {
 
         namespace.method("path_find")
-            .description("Computes a path between two positions, simulating a generic player-like ground walker")
+            .description("Computes a path between two positions or entities, simulating a generic player-like ground walker")
             .requestSchema(PathFindRequest.SCHEMA)
             .responseSchema(PathFindResponse.SCHEMA)
             .register((server, client, params) -> {
                 try {
                     ServerLevel level = BlockResolver.resolveLevel(server, params.dimension());
-                    BlockPos startPos = BlockResolver.resolvePosition(params.start());
-                    BlockPos endPos = BlockResolver.resolvePosition(params.end());
+                    BlockPos startPos = resolveTargetPos(server, params.start());
+                    BlockPos endPos = resolveTargetPos(server, params.end());
 
                     double distance = Math.sqrt(startPos.distSqr(endPos));
                     if (distance > MAX_DISTANCE) {
@@ -102,8 +92,6 @@ public class PathFind {
 
                     List<List<Integer>> waypoints = toWaypoints(path);
 
-                    // Normalize: make sure the response always starts exactly at 'start',
-                    // since the Path's node list doesn't necessarily include the start position.
                     List<Integer> startList = List.of(startPos.getX(), startPos.getY(), startPos.getZ());
                     if (waypoints.isEmpty() || !waypoints.get(0).equals(startList)) {
                         waypoints.add(0, startList);
@@ -118,41 +106,89 @@ public class PathFind {
     }
 
     /**
-     * Creates a temporary {@link Villager} as a mob profile for the path finder, computes
-     * the path, then lets it be garbage-collected. The entity is <b>never added to the
-     * world</b> - it is only used as a profile container. {@code PathNavigation.createPath}
-     * reads the level via the entity's {@code level} reference (set during {@code create()}),
-     * not via the entity being present in it.
+     * Resolves a {@link PathFindTarget} to a {@link BlockPos}.
      *
-     * @param level The level to path find in
+     * <p>If the target specifies a {@code position}, it is used directly. Otherwise the
+     * entity is looked up by {@code id} (UUID) or {@code name} (online player) and its
+     * current block position is returned.</p>
+     *
+     * @param server The running {@link MinecraftServer} instance
+     * @param target The target to resolve
+     * @return The resolved {@link BlockPos}
+     * @throws IllegalArgumentException if none of the three fields is set, the UUID is
+     * malformed, or no matching entity is found
+     */
+    private static BlockPos resolveTargetPos(MinecraftServer server, PathFindTarget target) {
+        if (target.position().isPresent()) {
+            List<Integer> pos = target.position().get();
+            if (pos.size() != 3) {
+                throw new IllegalArgumentException("'position' must contain exactly 3 elements [x, y, z]");
+            }
+            return new BlockPos(pos.get(0), pos.get(1), pos.get(2));
+        }
+
+        if (target.id().isEmpty() && target.name().isEmpty()) {
+            throw new IllegalArgumentException("PathFind target must specify 'position', 'id', or 'name'");
+        }
+
+        Entity entity = null;
+
+        if (target.id().isPresent()) {
+            UUID uuid;
+            try {
+                uuid = UUID.fromString(target.id().get());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid UUID: " + target.id().get());
+            }
+            entity = server.getPlayerList().getPlayer(uuid);
+            if (entity == null) {
+                for (ServerLevel level : server.getAllLevels()) {
+                    entity = level.getEntity(uuid);
+                    if (entity != null) break;
+                }
+            }
+        }
+
+        if (entity == null && target.name().isPresent()) {
+            entity = server.getPlayerList().getPlayerByName(target.name().get());
+        }
+
+        if (entity == null) {
+            String identifier = target.id().orElseGet(() -> target.name().get());
+            throw new IllegalArgumentException("Entity not found: " + identifier);
+        }
+
+        return entity.blockPosition();
+    }
+
+    /**
+     * Creates a temporary {@link Villager} as a mob profile for the path finder, computes
+     * the path, then discards the entity immediately.
+     *
+     * @param level    The level to path find in
      * @param startPos The starting position
-     * @param endPos The target position
+     * @param endPos   The target position
      * @return The computed {@link Path}, or {@code null} if no path was found
      */
     private static Path computePath(ServerLevel level, BlockPos startPos, BlockPos endPos) {
-        // UNCERTAIN: exact factory method/signature for creating an entity instance in your version.
-        Villager villager = EntityType.VILLAGER.create(level, EntitySpawnReason.COMMAND);
-        if (villager == null) return null;
+        Villager entityContainer = EntityType.VILLAGER.create(level, EntitySpawnReason.COMMAND);
+        if (entityContainer == null) return null;
 
-        villager.setInvisible(true);
-        villager.setSilent(true);
-        villager.setInvulnerable(true);
+        entityContainer.setNoAi(true);
+        entityContainer.setOnGround(true);
+        entityContainer.setPos(startPos.getX() + 0.5, startPos.getY(), startPos.getZ() + 0.5);
 
-        // setPos() is the base Entity position setter, always available regardless of
-        // world presence - unlike moveTo() which had different overloads across versions.
-        villager.setPos(startPos.getX() + 0.5, startPos.getY(), startPos.getZ() + 0.5);
+        try {
+            AttributeInstance followRange = entityContainer.getAttribute(Attributes.FOLLOW_RANGE);
+            if (followRange != null) {
+                followRange.setBaseValue(MAX_DISTANCE + 16.0);
+            }
 
-        // UNCERTAIN: whether boosting FOLLOW_RANGE is actually what's needed to let
-        // createPath search out to MAX_DISTANCE - if paths fail beyond a short range
-        // (e.g. ~16-48 blocks), this is the first thing to check.
-        AttributeInstance followRange = villager.getAttribute(Attributes.FOLLOW_RANGE);
-        if (followRange != null) {
-            followRange.setBaseValue(MAX_DISTANCE + 16.0);
+            PathNavigation navigation = entityContainer.getNavigation();
+            return navigation.createPath(endPos, 0);
+        } finally {
+            entityContainer.discard();
         }
-
-        PathNavigation navigation = villager.getNavigation();
-        // UNCERTAIN: createPath's exact overload/accuracy semantics for your version.
-        return navigation.createPath(endPos, 0);
     }
 
     /**
@@ -164,8 +200,6 @@ public class PathFind {
     private static List<List<Integer>> toWaypoints(Path path) {
         List<List<Integer>> waypoints = new ArrayList<>();
         for (int i = 0; i < path.getNodeCount(); i++) {
-            // UNCERTAIN: direct field access (node.x/y/z) vs. a possible accessor method
-            // (e.g. node.asBlockPos()) for your version.
             Node node = path.getNode(i);
             waypoints.add(List.of(node.x, node.y, node.z));
         }
