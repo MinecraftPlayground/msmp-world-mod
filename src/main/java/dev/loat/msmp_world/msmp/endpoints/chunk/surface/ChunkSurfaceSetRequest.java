@@ -14,39 +14,41 @@ import java.util.Optional;
 /**
  * Request payload for the {@code world:chunk/surface/set} method.
  *
- * <p>Mirrors the shape of the {@code world:chunk/surface} response, so a GET result can be
- * modified and sent straight back (round-trip friendly): {@code palette} entries are pure
- * (id + optional states, no {@code components}); {@code heights}/{@code blocks} must each
- * contain exactly 256 entries (flat index order, {@code index = localX * 16 + localZ}).</p>
+ * <p>Replaces the surface block of each column in a chunk. The server determines the
+ * placement Y automatically from the current terrain (using the height map specified in
+ * {@code heightMap}, defaulting to {@code MOTION_BLOCKING_NO_LEAVES}) – there is no need
+ * to supply heights explicitly. To place blocks at a specific Y-coordinate, use
+ * {@code world:block/set} instead.</p>
  *
- * <p><b>Sentinel values</b> (Mojang's Codec system can't represent {@code null} inline in a
- * JSON array): {@code heights[i] == Integer.MIN_VALUE} or {@code blocks[i] == -1} means
- * "leave this column untouched" - both should normally be set together.</p>
+ * <p>{@code palette} entries are pure (id + optional states, no {@code components});
+ * {@code blocks} must contain exactly 256 entries (flat index order,
+ * {@code index = localX * 16 + localZ}).</p>
  *
- * <p>Example JSON representation (excerpt, 256 entries in reality):</p>
+ * <p><b>Sentinel value</b> for {@code blocks[i] == -1}: leave this column untouched.</p>
+ *
+ * <p>Example – paint all surface blocks of a chunk with sand:</p>
  * <pre>{@code
  * {
  *   "dimension": "minecraft:overworld",
  *   "chunk": [6, -2],
- *   "palette": [{ "id": "minecraft:grass_block" }, { "id": "minecraft:chest", "states": { "facing": "north" } }],
- *   "heights": [71, 77],
- *   "blocks": [0, 1],
- *   "blockEntities": [{ "index": 1, "components": { "Items": [] } }]
+ *   "palette": [{ "id": "minecraft:sand" }],
+ *   "blocks": [0, 0, 0, ... 256 entries total ]
  * }
  * }</pre>
  *
  * @param dimension The dimension's resource key as a string
  * @param chunk The chunk coordinates as {@code [chunkX, chunkZ]}
+ * @param heightMap Which height map to use when deriving placement Y (optional,
+ * defaults to {@code MOTION_BLOCKING_NO_LEAVES})
  * @param palette The unique block type references referenced by {@code blocks}
- * @param heights The target Y-coordinate per column (256 entries, flat index order)
- * @param blocks The palette index per column (256 entries, flat index order)
+ * @param blocks The palette index per column (256 entries, flat index order; -1 = skip)
  * @param blockEntities Sparse per-column block-entity data to apply, keyed by flat index
  */
 public record ChunkSurfaceSetRequest(
     String dimension,
     List<Integer> chunk,
+    Optional<String> heightMap,
     List<BlockTypeRef> palette,
-    List<Integer> heights,
     List<Integer> blocks,
     Optional<List<BlockEntityRef>> blockEntities
 ) {
@@ -57,7 +59,7 @@ public record ChunkSurfaceSetRequest(
     private static final Schema<List<BlockTypeRef>> PALETTE_SCHEMA =
         Schema.ofType("array", BlockTypeRef.CODEC.listOf());
 
-    private static final Schema<List<Integer>> COLUMNS_SCHEMA =
+    private static final Schema<List<Integer>> BLOCKS_SCHEMA =
         Schema.ofType("array", Codec.INT.listOf());
 
     private static final Schema<List<BlockEntityRef>> BLOCK_ENTITIES_SCHEMA =
@@ -69,8 +71,8 @@ public record ChunkSurfaceSetRequest(
     public static final Codec<ChunkSurfaceSetRequest> CODEC = RecordCodecBuilder.create(i -> i.group(
         Codec.STRING.fieldOf("dimension").forGetter(ChunkSurfaceSetRequest::dimension),
         Codec.INT.listOf().fieldOf("chunk").forGetter(ChunkSurfaceSetRequest::chunk),
+        Codec.STRING.optionalFieldOf("heightMap").forGetter(ChunkSurfaceSetRequest::heightMap),
         BlockTypeRef.CODEC.listOf().fieldOf("palette").forGetter(ChunkSurfaceSetRequest::palette),
-        Codec.INT.listOf().fieldOf("heights").forGetter(ChunkSurfaceSetRequest::heights),
         Codec.INT.listOf().fieldOf("blocks").forGetter(ChunkSurfaceSetRequest::blocks),
         BlockEntityRef.CODEC.listOf().optionalFieldOf("blockEntities").forGetter(ChunkSurfaceSetRequest::blockEntities)
     ).apply(i, ChunkSurfaceSetRequest::new));
@@ -81,8 +83,8 @@ public record ChunkSurfaceSetRequest(
     public static final Schema<ChunkSurfaceSetRequest> SCHEMA = Schema.record(CODEC)
         .withField("dimension", Schema.STRING_SCHEMA)
         .withField("chunk", CHUNK_SCHEMA)
+        .withField("heightMap", Schema.STRING_SCHEMA)
         .withField("palette", PALETTE_SCHEMA)
-        .withField("heights", COLUMNS_SCHEMA)
-        .withField("blocks", COLUMNS_SCHEMA)
+        .withField("blocks", BLOCKS_SCHEMA)
         .withField("blockEntities", BLOCK_ENTITIES_SCHEMA);
 }

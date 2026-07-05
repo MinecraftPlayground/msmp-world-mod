@@ -121,7 +121,7 @@ worldZ = chunkZ * 16 + (index % 16)
 **`heightMap` values** (optional, defaults to `MOTION_BLOCKING_NO_LEAVES`):
 
 | Value                       | Meaning                                                       |
-|-----------------------------|---------------------------------------------------------------|
+|:----------------------------|:--------------------------------------------------------------|
 | `WORLD_SURFACE`             | Topmost non-air block (includes snow, leaves, flowers)        |
 | `MOTION_BLOCKING`           | Topmost blocking block, water surface counts                  |
 | `MOTION_BLOCKING_NO_LEAVES` | Like above, but leaves are ignored (shows ground under trees) |
@@ -131,28 +131,32 @@ worldZ = chunkZ * 16 + (index % 16)
 
 ### `world:chunk/surface/set`
 
-Bulk-places blocks across all 256 surface columns of a chunk. Uses the same compact palette format as `world:chunk/surface`, so a GET response can be modified and sent straight back.
+Replaces the surface block of each column in a chunk. The server determines the placement Y automatically from the current terrain - no need to supply heights. To place blocks at a specific Y-coordinate, use `world:block/set` instead.
+
+**`heightMap`** (optional, defaults to `MOTION_BLOCKING_NO_LEAVES`) defines what counts as "the surface" when computing placement heights - same values as `world:chunk/surface`. For example, `OCEAN_FLOOR` lets you replace the ocean floor without touching the water surface above it.
+
+**`blocks[i] == -1`**: leave this column untouched.
 
 ```json
-// Request (excerpt - heights/blocks always have exactly 256 entries)
+// Request - paint all surface blocks with sand
 {
   "dimension": "minecraft:overworld",
   "chunk": [6, -2],
-  "palette": [
-    { "id": "minecraft:grass_block" },
-    { "id": "minecraft:chest", "states": { "facing": "north" } }
-  ],
-  "heights": [71, 77, /* ... */],
-  "blocks":  [0,  1,  /* ... */],
-  "blockEntities": [
-    { "index": 1, "components": { "Items": [ { "Slot": 0, "id": "minecraft:diamond", "count": 5 } ] } }
-  ]
+  "palette": [{ "id": "minecraft:sand" }],
+  "blocks": [0, 0, 0, /* ... 256 entries total */]
 }
 
-// Response - mirrors the validated request (no heightMap field)
-```
+// Request - replace ocean floor using a different height map
+{
+  "dimension": "minecraft:overworld",
+  "chunk": [6, -2],
+  "heightMap": "OCEAN_FLOOR",
+  "palette": [{ "id": "minecraft:gravel" }],
+  "blocks": [0, 0, 0, /* ... */]
+}
 
-**Sentinel values:** `heights[i] == -2147483648` or `blocks[i] == -1` means "leave this column untouched". Both should always be set together.
+// Response - same shape as world:chunk/surface (includes resolved heights as confirmation)
+```
 
 Validation runs in full before any world mutation - a bad palette entry or invalid `blockEntities` reference fails the entire request rather than leaving a partially-applied chunk.
 

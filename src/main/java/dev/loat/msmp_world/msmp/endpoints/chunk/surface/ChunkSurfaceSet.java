@@ -11,6 +11,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,28 +22,27 @@ import java.util.Optional;
 /**
  * Registers the {@code world:chunk/surface/set} MSMP method.
  *
- * <p>Bulk-places blocks across all 256 columns of a chunk, using the same compact
- * palette/index format as {@code world:chunk/surface} - sentinel entries
- * ({@link ChunkSurface#NO_HEIGHT}/{@link ChunkSurface#NO_PALETTE_INDEX}) mean "leave this
- * column untouched". Much more efficient than 256 individual {@code world:block/set} calls.</p>
+ * <p>Replaces the surface block of each column in a chunk. The server determines the
+ * placement Y from the current terrain automatically (via the specified or default
+ * height map) - there is no need to supply heights in the request. To place blocks at a
+ * specific Y-coordinate use {@code world:block/set} instead.</p>
  *
- * <p>The response mirrors the validated request rather than re-reading the world via a
- * heightMap scan - see {@link ChunkSurfaceResponse} for why.</p>
+ * <p>The response includes the resolved {@code heights} as confirmation of where each
+ * block was actually placed.</p>
  *
  * <p><b>v0 scope</b> - deferred to a later iteration: every touched position always gets a
- * full neighbor/physics update ({@code Block.UPDATE_ALL}), same as {@code world:block/set}.
- * For 256 positions in a tight loop this could be noticeably more expensive than for a
- * single block (e.g. cascading redstone updates) - suppressing updates during the bulk pass
- * and doing a single final update afterward would be a natural follow-up optimization. Only
- * already-loaded chunks are properly handled, same caveat as the other block methods.</p>
+ * full neighbor/physics update ({@code Block.UPDATE_ALL}). For 256 positions in a tight
+ * loop this could be noticeably more expensive than for a single block (e.g. cascading
+ * redstone updates) - suppressing updates during the bulk pass and doing a single final
+ * update afterward would be a natural follow-up optimization. Only already-loaded chunks
+ * are properly handled, same caveat as the other block methods.</p>
  *
  * <p>Validation happens in two passes before any world mutation: all palette entries are
  * resolved upfront, and all {@code blockEntities} references are checked against
  * {@code blocks} - so a bad entry fails the whole request rather than leaving a
  * half-applied chunk.</p>
  *
- * <p>Example request (excerpt - {@code heights}/{@code blocks} have 256 entries in reality;
- * {@code Integer.MIN_VALUE} / {@code -1} mark a skipped column):</p>
+ * <p>Example request:</p>
  * <pre>{@code
  * {
  *   "jsonrpc": "2.0",
@@ -50,9 +51,8 @@ import java.util.Optional;
  *   "params": [{
  *     "dimension": "minecraft:overworld",
  *     "chunk": [6, -2],
- *     "palette": [{ "id": "minecraft:grass_block" }],
- *     "heights": [71, -2147483648],
- *     "blocks": [0, -1]
+ *     "palette": [{ "id": "minecraft:sand" }],
+ *     "blocks": [0, 0, 0, ... 256 entries total ]
  *   }]
  * }
  * }</pre>
@@ -79,18 +79,30 @@ public class ChunkSurfaceSet {
                     int chunkX = chunkCoords[0];
                     int chunkZ = chunkCoords[1];
 
-                    List<Integer> heights = params.heights();
                     List<Integer> blocks = params.blocks();
 
-                    if (heights.size() != 256) {
-                        throw new IllegalArgumentException(
-                            "'heights' must contain exactly 256 entries, got " + heights.size()
-                        );
-                    }
                     if (blocks.size() != 256) {
                         throw new IllegalArgumentException(
                             "'blocks' must contain exactly 256 entries, got " + blocks.size()
                         );
+                    }
+
+                    // Derive placement heights from the current terrain surface.
+                    String heightmapName = params.heightMap().orElse(ChunkSurface.DEFAULT_HEIGHTMAP);
+                    Heightmap.Types heightmapType = ChunkSurface.resolveHeightmapType(heightmapName);
+                    LevelChunk chunk = level.getChunk(chunkX, chunkZ);
+                    int minY = level.dimensionType().minY();
+
+                    List<Integer> heights = new ArrayList<>(256);
+                    for (int index = 0; index < 256; index++) {
+                        if (blocks.get(index) == ChunkSurface.NO_PALETTE_INDEX) {
+                            heights.add(ChunkSurface.NO_HEIGHT);
+                            continue;
+                        }
+                        int localX = ChunkResolver.localX(index);
+                        int localZ = ChunkResolver.localZ(index);
+                        int rawHeight = chunk.getHeight(heightmapType, localX, localZ);
+                        heights.add(rawHeight <= minY ? ChunkSurface.NO_HEIGHT : rawHeight - 1);
                     }
 
                     List<BlockTypeRef> palette = params.palette();
@@ -103,16 +115,16 @@ public class ChunkSurfaceSet {
                     }
 
                     List<BlockEntityRef> blockEntities = params.blockEntities().orElse(List.of());
-                    for (BlockEntityRef blockEntity : blockEntities) {
-                        if (blockEntity.index() < 0 || blockEntity.index() >= 256) {
+                    for (BlockEntityRef ber : blockEntities) {
+                        if (ber.index() < 0 || ber.index() >= 256) {
                             throw new IllegalArgumentException(
-                                "blockEntities references invalid index " + blockEntity.index()
+                                "blockEntities references invalid index " + ber.index()
                             );
                         }
-                        if (blocks.get(blockEntity.index()) == ChunkSurface.NO_PALETTE_INDEX) {
+                        if (blocks.get(ber.index()) == ChunkSurface.NO_PALETTE_INDEX) {
                             throw new IllegalArgumentException(
                                 "blockEntities references index %d, but that column is marked as skipped"
-                                    .formatted(blockEntity.index())
+                                    .formatted(ber.index())
                             );
                         }
                     }
@@ -139,14 +151,14 @@ public class ChunkSurfaceSet {
                     }
 
                     // Pass 3: apply block-entity data, now that every block is placed.
-                    for (BlockEntityRef blockEntity : blockEntities) {
-                        int localX = ChunkResolver.localX(blockEntity.index());
-                        int localZ = ChunkResolver.localZ(blockEntity.index());
-                        int height = heights.get(blockEntity.index());
+                    for (BlockEntityRef ber : blockEntities) {
+                        int localX = ChunkResolver.localX(ber.index());
+                        int localZ = ChunkResolver.localZ(ber.index());
+                        int height = heights.get(ber.index());
                         BlockPos pos = new BlockPos(chunkX * 16 + localX, height, chunkZ * 16 + localZ);
 
-                        String blockId = palette.get(blocks.get(blockEntity.index())).id();
-                        BlockResolver.applyComponents(level, pos, blockId, blockEntity.components());
+                        String blockId = palette.get(blocks.get(ber.index())).id();
+                        BlockResolver.applyComponents(level, pos, blockId, ber.components());
                     }
 
                     return new ChunkSurfaceResponse(

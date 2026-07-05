@@ -13,12 +13,12 @@ import java.util.Optional;
  *
  * <p>Example JSON representation:</p>
  * <pre>{@code
- * { "dimension": "minecraft:overworld", "chunk": [6, -2], "heightmap": "MOTION_BLOCKING_NO_LEAVES" }
+ * { "dimension": "minecraft:overworld", "chunk": [6, -2], "heightMap": "MOTION_BLOCKING_NO_LEAVES" }
  * }</pre>
  *
  * @param dimension The dimension's resource key as a string
  * @param chunk The chunk coordinates as {@code [chunkX, chunkZ]}
- * @param heightMap Which heightmap definition to use - one of {@code WORLD_SURFACE},
+ * @param heightMap Which height map definition to use - one of {@code WORLD_SURFACE},
  * {@code MOTION_BLOCKING}, {@code MOTION_BLOCKING_NO_LEAVES} (default if omitted),
  * {@code OCEAN_FLOOR}
  */
