@@ -38,7 +38,7 @@ The mod currently provides the following MSMP RPC methods. All of these methods 
 
 Returns the block (id, states, and block-entity data) at a given position.
 
-```json
+```jsonc
 // Request
 { "dimension": "minecraft:overworld", "position": [100, 64, 200] }
 
@@ -62,7 +62,7 @@ Returns the block (id, states, and block-entity data) at a given position.
 
 Sets the block at a given position. Returns the confirmed state after placement.
 
-```json
+```jsonc
 // Request
 {
   "dimension": "minecraft:overworld",
@@ -85,7 +85,7 @@ Sets the block at a given position. Returns the confirmed state after placement.
 
 Returns the surface block of each of the 256 columns (16×16) of a chunk, using a compact palette format to avoid repeating identical block descriptions.
 
-```json
+```jsonc
 // Request
 { "dimension": "minecraft:overworld", "chunk": [6, -2], "heightMap": "MOTION_BLOCKING_NO_LEAVES" }
 
@@ -137,7 +137,7 @@ Replaces the surface block of each column in a chunk. The server determines the 
 
 **`blocks[i] == -1`**: leave this column untouched.
 
-```json
+```jsonc
 // Request - paint all surface blocks with sand
 {
   "dimension": "minecraft:overworld",
@@ -168,7 +168,7 @@ Computes a navigation path between two positions, simulating a generic player-li
 
 **Hard distance limit:** requests with a straight-line distance greater than 256 blocks between `start` and `end` are rejected immediately.
 
-```json
+```jsonc
 // Request
 {
   "dimension": "minecraft:overworld",
