@@ -1,6 +1,7 @@
 package dev.loat.msmp_world.config.files;
 
 import dev.loat.config_lib.annotation.Annotation;
+import dev.loat.msmp_world.config.files.path_find.PathFindConfig;
 
 
 @Annotation.Comment("""
@@ -9,6 +10,6 @@ import dev.loat.config_lib.annotation.Annotation;
 public class MSMPWorldConfigFile {
     private MSMPWorldConfigFile() {}
 
-    @Annotation.Comment("Example foo")
-    public String foo = "foo";
+    @Annotation.Comment("Configuration for path finding settings.")
+    public PathFindConfig pathFind = new PathFindConfig();
 }

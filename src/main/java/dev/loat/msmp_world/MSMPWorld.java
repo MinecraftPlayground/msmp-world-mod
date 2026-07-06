@@ -2,7 +2,7 @@ package dev.loat.msmp_world;
 
 import dev.loat.msmp.MSMPNamespace;
 import dev.loat.msmp.MSMPServer;
-// import dev.loat.msmp_world.config.Config;
+import dev.loat.msmp_world.config.Config;
 import dev.loat.msmp_world.logging.Logger;
 import dev.loat.msmp_world.msmp.endpoints.Endpoints;
 import net.fabricmc.api.ModInitializer;
@@ -38,7 +38,7 @@ public class MSMPWorld implements ModInitializer {
     public void onInitialize() {
         Logger.setLoggerClass(MSMPWorld.class);
 
-        // Config.register();
+        Config.register();
 
         Endpoints.register(NS, () -> msmp);
 

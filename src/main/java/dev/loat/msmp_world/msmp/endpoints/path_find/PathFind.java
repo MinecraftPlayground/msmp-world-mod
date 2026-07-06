@@ -1,10 +1,11 @@
 package dev.loat.msmp_world.msmp.endpoints.path_find;
 
 import dev.loat.msmp.MSMPNamespace;
+import dev.loat.msmp_world.config.Config;
 import dev.loat.msmp_world.logging.Logger;
 import dev.loat.msmp_world.msmp.components.BlockResolver;
 import dev.loat.msmp_world.msmp.components.ChunkResolver;
-
+import dev.loat.msmp_world.msmp.components.EntityRequest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -52,12 +53,6 @@ import java.util.UUID;
  */
 public class PathFind {
 
-    /**
-     * Hard distance limit (straight-line, in blocks) beyond which path finding is rejected
-     * outright, before even attempting the search.
-     */
-    private static final double MAX_DISTANCE = 256.0;
-
     private PathFind() {}
 
     /**
@@ -77,25 +72,37 @@ public class PathFind {
                     BlockPos startPos = resolveTargetPos(server, params.start());
                     BlockPos endPos = resolveTargetPos(server, params.end());
 
+                    double maxDistance = Config.getConfig().pathFind.maxDistance;
                     double distance = Math.sqrt(startPos.distSqr(endPos));
-                    if (distance > MAX_DISTANCE) {
+                    if (distance > maxDistance) {
                         throw new IllegalArgumentException(
-                            "Distance between 'start' and 'end' (%.1f) exceeds the maximum of %.0f blocks"
-                                .formatted(distance, MAX_DISTANCE)
+                            "Distance between 'start' and 'end' (%.1f) exceeds the configured maximum of %.0f blocks"
+                                .formatted(distance, maxDistance)
                         );
                     }
 
                     Path path = computePath(level, startPos, endPos);
 
-                    if (path == null) {
+                    if (path == null || !path.canReach()) {
                         return new PathFindResponse(params.dimension(), false, List.of());
                     }
 
                     List<List<Integer>> waypoints = toWaypoints(path);
 
+                    // Normalize start: the Path's node list doesn't necessarily include the
+                    // exact start position as its first entry.
                     List<Integer> startList = List.of(startPos.getX(), startPos.getY(), startPos.getZ());
                     if (waypoints.isEmpty() || !waypoints.get(0).equals(startList)) {
                         waypoints.add(0, startList);
+                    }
+
+                    // Normalize end: the pathfinder stops one node short of the target
+                    // (the final approach is implicit in Minecraft's AI), so we append the
+                    // requested end position explicitly if it isn't already the last node.
+                    // Only done after canReach() confirmed the path actually gets there.
+                    List<Integer> endList = List.of(endPos.getX(), endPos.getY(), endPos.getZ());
+                    if (waypoints.isEmpty() || !waypoints.get(waypoints.size() - 1).equals(endList)) {
+                        waypoints.add(endList);
                     }
 
                     return new PathFindResponse(params.dimension(), true, waypoints);
@@ -110,13 +117,14 @@ public class PathFind {
      * Resolves a {@link PathFindTarget} to a {@link BlockPos}.
      *
      * <p>If the target specifies a {@code position}, it is used directly. Otherwise the
-     * entity is looked up by {@code id} (UUID) or {@code name} (online player) and its
-     * current block position is returned.</p>
+     * entity is looked up via the nested {@code entity} reference (by {@code id} or
+     * {@code name}) and its current block position is returned.</p>
      *
      * @param server The running {@link MinecraftServer} instance
      * @param target The target to resolve
      * @return The resolved {@link BlockPos}
-     * @throws IllegalArgumentException if none of the three fields is set, the UUID is
+     * @throws IllegalArgumentException if neither {@code position} nor {@code entity} is
+     * set, the entity reference is missing both {@code id} and {@code name}, the UUID is
      * malformed, or no matching entity is found
      */
     private static BlockPos resolveTargetPos(MinecraftServer server, PathFindTarget target) {
@@ -128,34 +136,39 @@ public class PathFind {
             return new BlockPos(pos.get(0), pos.get(1), pos.get(2));
         }
 
-        if (target.id().isEmpty() && target.name().isEmpty()) {
-            throw new IllegalArgumentException("PathFind target must specify 'position', 'id', or 'name'");
+        if (target.entity().isEmpty()) {
+            throw new IllegalArgumentException("PathFind target must specify either 'position' or 'entity'");
+        }
+
+        EntityRequest entityRef = target.entity().get();
+        if (entityRef.id().isEmpty() && entityRef.name().isEmpty()) {
+            throw new IllegalArgumentException("'entity' must specify at least 'id' or 'name'");
         }
 
         Entity entity = null;
 
-        if (target.id().isPresent()) {
-            UUID uuid;
+        UUID uuid = null;
+
+        if (entityRef.id().isPresent()) {
             try {
-                uuid = UUID.fromString(target.id().get());
+                uuid = UUID.fromString(entityRef.id().get());
+                entity = server.getPlayerList().getPlayer(uuid);
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid UUID: " + target.id().get());
+                throw new IllegalArgumentException("Invalid UUID: " + entityRef.id().get());
             }
-            entity = server.getPlayerList().getPlayer(uuid);
-            if (entity == null) {
-                for (ServerLevel level : server.getAllLevels()) {
-                    entity = level.getEntity(uuid);
-                    if (entity != null) break;
-                }
+        } else {
+            for (ServerLevel level : server.getAllLevels()) {
+                entity = level.getEntity(uuid);
+                if (entity != null) break;
             }
         }
 
-        if (entity == null && target.name().isPresent()) {
-            entity = server.getPlayerList().getPlayerByName(target.name().get());
+        if (entity == null && entityRef.name().isPresent()) {
+            entity = server.getPlayerList().getPlayerByName(entityRef.name().get());
         }
 
         if (entity == null) {
-            String identifier = target.id().orElseGet(() -> target.name().get());
+            String identifier = entityRef.id().orElseGet(() -> entityRef.name().get());
             throw new IllegalArgumentException("Entity not found: " + identifier);
         }
 
@@ -182,9 +195,10 @@ public class PathFind {
         entityContainer.setPos(startPos.getX() + 0.5, startPos.getY(), startPos.getZ() + 0.5);
 
         try {
+            double maxDistance = Config.getConfig().pathFind.maxDistance;
             AttributeInstance followRange = entityContainer.getAttribute(Attributes.FOLLOW_RANGE);
             if (followRange != null) {
-                followRange.setBaseValue(MAX_DISTANCE + 16.0);
+                followRange.setBaseValue(maxDistance + 16.0);
             }
 
             PathNavigation navigation = entityContainer.getNavigation();
