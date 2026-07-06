@@ -179,7 +179,7 @@ Both `start` and `end` accept either a fixed position or an entity reference (by
 { "entity": { "name": "Steve" } }
 ```
 
-**Hard distance limit:** requests with a straight-line distance greater than 256 blocks between `start` and `end` are rejected immediately. (This will be configurable in a future version.)
+**Hard distance limit:** requests with a straight-line distance greater than 256 blocks between `start` and `end` are rejected immediately. This can be configured through the config file.
 
 ```jsonc
 // Request - position to position
