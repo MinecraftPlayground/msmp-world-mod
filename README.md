@@ -173,10 +173,10 @@ Both `start` and `end` accept either a fixed position or an entity reference (by
 { "position": [100, 64, 200] }
 
 // Any entity by UUID
-{ "id": "069a79f4-44e9-4726-a5be-fca90e38aaf5" }
+{ "entity": { "id": "069a79f4-44e9-4726-a5be-fca90e38aaf5" } }
 
 // Online player by name
-{ "name": "Steve" }
+{ "entity": { "name": "Steve" } }
 ```
 
 **Hard distance limit:** requests with a straight-line distance greater than 256 blocks between `start` and `end` are rejected immediately. (This will be configurable in a future version.)
@@ -192,15 +192,15 @@ Both `start` and `end` accept either a fixed position or an entity reference (by
 // Request - entity to position
 {
   "dimension": "minecraft:overworld",
-  "start": { "name": "Steve" },
+  "start": { "entity": { "name": "Steve" } },
   "end":   { "position": [150, 70, 230] }
 }
 
 // Request - entity to entity
 {
   "dimension": "minecraft:overworld",
-  "start": { "name": "Steve" },
-  "end":   { "id": "069a79f4-44e9-4726-a5be-fca90e38aaf5" }
+  "start": { "entity": { "name": "Steve" } },
+  "end":   { "entity": { "id": "069a79f4-44e9-4726-a5be-fca90e38aaf5" } }
 }
 
 // Response - path found
