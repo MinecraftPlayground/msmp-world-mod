@@ -6,6 +6,12 @@ import dev.loat.msmp_world.logging.Logger;
 import dev.loat.msmp_world.msmp.components.BlockResolver;
 import dev.loat.msmp_world.msmp.components.ChunkResolver;
 import dev.loat.msmp_world.msmp.components.EntityRequest;
+import dev.loat.msmp_world.msmp.exceptions.DistanceExceededException;
+import dev.loat.msmp_world.msmp.exceptions.EntityNotFoundException;
+import dev.loat.msmp_world.msmp.exceptions.InvalidParamsException;
+import dev.loat.msmp_world.msmp.exceptions.InvalidUUIDException;
+import dev.loat.msmp_world.msmp.exceptions.MSMPException;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -75,10 +81,7 @@ public class PathFind {
                     double maxDistance = Config.getConfig().pathFind.maxDistance;
                     double distance = Math.sqrt(startPos.distSqr(endPos));
                     if (distance > maxDistance) {
-                        throw new IllegalArgumentException(
-                            "Distance between 'start' and 'end' (%.1f) exceeds the configured maximum of %.0f blocks"
-                                .formatted(distance, maxDistance)
-                        );
+                        throw new DistanceExceededException(distance, maxDistance);
                     }
 
                     Path path = computePath(level, startPos, endPos);
@@ -106,7 +109,7 @@ public class PathFind {
                     }
 
                     return new PathFindResponse(params.dimension(), true, waypoints);
-                } catch (IllegalArgumentException e) {
+                } catch (MSMPException e) {
                     Logger.warning("world:path_find - " + e.getMessage());
                     throw e;
                 }
@@ -131,35 +134,35 @@ public class PathFind {
         if (target.position().isPresent()) {
             List<Integer> pos = target.position().get();
             if (pos.size() != 3) {
-                throw new IllegalArgumentException("'position' must contain exactly 3 elements [x, y, z]");
+                throw new InvalidParamsException("'position' must contain exactly 3 elements [x, y, z]");
             }
             return new BlockPos(pos.get(0), pos.get(1), pos.get(2));
         }
 
         if (target.entity().isEmpty()) {
-            throw new IllegalArgumentException("PathFind target must specify either 'position' or 'entity'");
+            throw new InvalidParamsException("PathFind target must specify either 'position' or 'entity'");
         }
 
         EntityRequest entityRef = target.entity().get();
         if (entityRef.id().isEmpty() && entityRef.name().isEmpty()) {
-            throw new IllegalArgumentException("'entity' must specify at least 'id' or 'name'");
+            throw new InvalidParamsException("'entity' must specify at least 'id' or 'name'");
         }
 
         Entity entity = null;
 
-        UUID uuid = null;
-
         if (entityRef.id().isPresent()) {
+            UUID uuid;
             try {
                 uuid = UUID.fromString(entityRef.id().get());
-                entity = server.getPlayerList().getPlayer(uuid);
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid UUID: " + entityRef.id().get());
+                throw new InvalidUUIDException(entityRef.id().get());
             }
-        } else {
-            for (ServerLevel level : server.getAllLevels()) {
-                entity = level.getEntity(uuid);
-                if (entity != null) break;
+            entity = server.getPlayerList().getPlayer(uuid);
+            if (entity == null) {
+                for (ServerLevel level : server.getAllLevels()) {
+                    entity = level.getEntity(uuid);
+                    if (entity != null) break;
+                }
             }
         }
 
@@ -169,7 +172,7 @@ public class PathFind {
 
         if (entity == null) {
             String identifier = entityRef.id().orElseGet(() -> entityRef.name().get());
-            throw new IllegalArgumentException("Entity not found: " + identifier);
+            throw new EntityNotFoundException(identifier);
         }
 
         return entity.blockPosition();
@@ -179,9 +182,9 @@ public class PathFind {
      * Creates a temporary {@link Villager} as a mob profile for the path finder, computes
      * the path, then discards the entity immediately.
      *
-     * @param level The level to path find in
+     * @param level    The level to path find in
      * @param startPos The starting position
-     * @param endPos The target position
+     * @param endPos   The target position
      * @return The computed {@link Path}, or {@code null} if no path was found
      */
     private static Path computePath(ServerLevel level, BlockPos startPos, BlockPos endPos) {

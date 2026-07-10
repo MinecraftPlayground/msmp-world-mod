@@ -9,8 +9,6 @@ package dev.loat.msmp_world.msmp.exceptions;
 public class MSMPException extends RuntimeException {
 
     /**
-     * Creates a new {@link MSMPException} with the given message.
-     *
      * @param message A human-readable description of the error
      */
     public MSMPException(String message) {

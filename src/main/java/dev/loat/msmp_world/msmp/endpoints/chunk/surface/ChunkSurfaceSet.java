@@ -6,6 +6,8 @@ import dev.loat.msmp_world.msmp.components.BlockEntityRef;
 import dev.loat.msmp_world.msmp.components.BlockResolver;
 import dev.loat.msmp_world.msmp.components.BlockTypeRef;
 import dev.loat.msmp_world.msmp.components.ChunkResolver;
+import dev.loat.msmp_world.msmp.exceptions.InvalidParamsException;
+import dev.loat.msmp_world.msmp.exceptions.MSMPException;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -82,7 +84,7 @@ public class ChunkSurfaceSet {
                     List<Integer> blocks = params.blocks();
 
                     if (blocks.size() != 256) {
-                        throw new IllegalArgumentException(
+                        throw new InvalidParamsException(
                             "'blocks' must contain exactly 256 entries, got " + blocks.size()
                         );
                     }
@@ -115,16 +117,16 @@ public class ChunkSurfaceSet {
                     }
 
                     List<BlockEntityRef> blockEntities = params.blockEntities().orElse(List.of());
-                    for (BlockEntityRef blockEntity : blockEntities) {
-                        if (blockEntity.index() < 0 || blockEntity.index() >= 256) {
-                            throw new IllegalArgumentException(
-                                "blockEntities references invalid index " + blockEntity.index()
+                    for (BlockEntityRef ber : blockEntities) {
+                        if (ber.index() < 0 || ber.index() >= 256) {
+                            throw new InvalidParamsException(
+                                "blockEntities references invalid index " + ber.index()
                             );
                         }
-                        if (blocks.get(blockEntity.index()) == ChunkSurface.NO_PALETTE_INDEX) {
-                            throw new IllegalArgumentException(
+                        if (blocks.get(ber.index()) == ChunkSurface.NO_PALETTE_INDEX) {
+                            throw new InvalidParamsException(
                                 "blockEntities references index %d, but that column is marked as skipped"
-                                    .formatted(blockEntity.index())
+                                    .formatted(ber.index())
                             );
                         }
                     }
@@ -138,7 +140,7 @@ public class ChunkSurfaceSet {
                             continue;
                         }
                         if (paletteIndex < 0 || paletteIndex >= resolvedPalette.size()) {
-                            throw new IllegalArgumentException(
+                            throw new InvalidParamsException(
                                 "blocks[%d] references invalid palette index %d".formatted(index, paletteIndex)
                             );
                         }
@@ -151,14 +153,14 @@ public class ChunkSurfaceSet {
                     }
 
                     // Pass 3: apply block-entity data, now that every block is placed.
-                    for (BlockEntityRef blockEntity : blockEntities) {
-                        int localX = ChunkResolver.localX(blockEntity.index());
-                        int localZ = ChunkResolver.localZ(blockEntity.index());
-                        int height = heights.get(blockEntity.index());
+                    for (BlockEntityRef ber : blockEntities) {
+                        int localX = ChunkResolver.localX(ber.index());
+                        int localZ = ChunkResolver.localZ(ber.index());
+                        int height = heights.get(ber.index());
                         BlockPos pos = new BlockPos(chunkX * 16 + localX, height, chunkZ * 16 + localZ);
 
-                        String blockId = palette.get(blocks.get(blockEntity.index())).id();
-                        BlockResolver.applyComponents(level, pos, blockId, blockEntity.components());
+                        String blockId = palette.get(blocks.get(ber.index())).id();
+                        BlockResolver.applyComponents(level, pos, blockId, ber.components());
                     }
 
                     return new ChunkSurfaceResponse(
@@ -170,7 +172,7 @@ public class ChunkSurfaceSet {
                         blocks,
                         blockEntities
                     );
-                } catch (IllegalArgumentException e) {
+                } catch (MSMPException e) {
                     Logger.warning("world:chunk/surface/set - " + e.getMessage());
                     throw e;
                 }

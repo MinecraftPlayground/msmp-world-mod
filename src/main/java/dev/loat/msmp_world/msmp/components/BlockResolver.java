@@ -4,6 +4,11 @@ import com.google.gson.JsonElement;
 import com.mojang.serialization.Dynamic;
 import com.mojang.serialization.JsonOps;
 
+import dev.loat.msmp_world.msmp.exceptions.InvalidBlockStateException;
+import dev.loat.msmp_world.msmp.exceptions.InvalidParamsException;
+import dev.loat.msmp_world.msmp.exceptions.UnknownBlockException;
+import dev.loat.msmp_world.msmp.exceptions.UnknownDimensionException;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -19,6 +24,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.storage.ValueInput;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,23 +48,23 @@ public final class BlockResolver {
     /**
      * Resolves a {@link ServerLevel} from its dimension resource key string.
      *
-     * @param server The running {@link MinecraftServer} instance
+     * @param server    The running {@link MinecraftServer} instance
      * @param dimension The dimension's resource key as a string (e.g. {@code minecraft:overworld})
      * @return The resolved {@link ServerLevel}
-     * @throws IllegalArgumentException if the dimension identifier is malformed or unknown
+     * @throws UnknownDimensionException if the identifier is malformed or the dimension is unknown
      */
     public static ServerLevel resolveLevel(MinecraftServer server, String dimension) {
         Identifier id;
         try {
             id = Identifier.parse(dimension);
         } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid dimension: " + dimension);
+            throw new UnknownDimensionException(dimension);
         }
 
         ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, id);
         ServerLevel level = server.getLevel(key);
         if (level == null) {
-            throw new IllegalArgumentException("Unknown dimension: " + dimension);
+            throw new UnknownDimensionException(dimension);
         }
         return level;
     }
@@ -68,11 +74,11 @@ public final class BlockResolver {
      *
      * @param position The position as a 3-element list
      * @return The corresponding {@link BlockPos}
-     * @throws IllegalArgumentException if the list does not contain exactly 3 elements
+     * @throws InvalidParamsException if the list does not contain exactly 3 elements
      */
     public static BlockPos resolvePosition(List<Integer> position) {
         if (position.size() != 3) {
-            throw new IllegalArgumentException(
+            throw new InvalidParamsException(
                 "'position' must contain exactly 3 elements [x, y, z], got " + position.size()
             );
         }
@@ -83,8 +89,8 @@ public final class BlockResolver {
      * Converts a {@link BlockState} at a given position into a {@link BlockRef}
      * (id + states + block-entity data as strings/JSON).
      *
-     * @param level The level the position belongs to (needed to look up the block entity, if any)
-     * @param pos The position of the block
+     * @param level The level the position belongs to
+     * @param pos   The position of the block
      * @param state The block state at that position
      * @return The corresponding {@link BlockRef}
      */
@@ -102,7 +108,7 @@ public final class BlockResolver {
      * API for your version.</p>
      *
      * @param level The level the position belongs to
-     * @param pos The position to check
+     * @param pos   The position to check
      * @return The block-entity data as JSON, or {@link Optional#empty()} if there is none
      */
     public static Optional<JsonElement> readComponents(ServerLevel level, BlockPos pos) {
@@ -127,13 +133,6 @@ public final class BlockResolver {
         return new BlockTypeRef(id.toString(), extractStates(state));
     }
 
-    /**
-     * Extracts a {@link BlockState}'s properties into a states map, shared by
-     * {@link #toBlockRef} and {@link #toBlockTypeRef}.
-     *
-     * @param state The block state to extract states from
-     * @return The states map, or {@link Optional#empty()} if the block has no states
-     */
     private static Optional<Map<String, String>> extractStates(BlockState state) {
         Map<String, String> states = new LinkedHashMap<>();
         for (Property<?> property : state.getProperties()) {
@@ -150,12 +149,10 @@ public final class BlockResolver {
     /**
      * Resolves a {@link BlockState} from a {@link BlockRef} (id + optional states).
      *
-     * <p>Missing states fall back to the block's default state values, matching Vanilla
-     * {@code /setblock} behavior.</p>
-     *
      * @param ref The block reference to resolve
      * @return The resolved {@link BlockState}
-     * @throws IllegalArgumentException if the block id is unknown, or a state name/value is invalid
+     * @throws UnknownBlockException       if the block id is unknown
+     * @throws InvalidBlockStateException  if a state key or value is invalid
      */
     public static BlockState resolveBlockState(BlockRef ref) {
         return resolveBlockState(ref.id(), ref.states());
@@ -163,11 +160,11 @@ public final class BlockResolver {
 
     /**
      * Resolves a {@link BlockState} from a {@link BlockTypeRef} (id + optional states).
-     * Same resolution logic as {@link #resolveBlockState(BlockRef)}, for palette entries.
      *
      * @param ref The block type reference to resolve
      * @return The resolved {@link BlockState}
-     * @throws IllegalArgumentException if the block id is unknown, or a state name/value is invalid
+     * @throws UnknownBlockException       if the block id is unknown
+     * @throws InvalidBlockStateException  if a state key or value is invalid
      */
     public static BlockState resolveBlockState(BlockTypeRef ref) {
         return resolveBlockState(ref.id(), ref.states());
@@ -179,12 +176,11 @@ public final class BlockResolver {
         try {
             id = Identifier.parse(blockId);
         } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid block id: " + blockId);
+            throw new UnknownBlockException(blockId);
         }
 
-        Block block = BuiltInRegistries.BLOCK.getOptional(id).orElseThrow(() ->
-            new IllegalArgumentException("Unknown block: " + blockId)
-        );
+        Block block = BuiltInRegistries.BLOCK.getOptional(id)
+            .orElseThrow(() -> new UnknownBlockException(blockId));
 
         BlockState state = block.defaultBlockState();
 
@@ -192,17 +188,12 @@ public final class BlockResolver {
             for (Map.Entry<String, String> entry : states.get().entrySet()) {
                 Property property = state.getBlock().getStateDefinition().getProperty(entry.getKey());
                 if (property == null) {
-                    throw new IllegalArgumentException(
-                        "Block '%s' has no state '%s'".formatted(blockId, entry.getKey())
-                    );
+                    throw new InvalidBlockStateException(blockId, entry.getKey(), null);
                 }
 
                 Optional<?> value = property.getValue(entry.getValue());
                 if (value.isEmpty()) {
-                    throw new IllegalArgumentException(
-                        "Invalid value '%s' for state '%s' on block '%s'"
-                            .formatted(entry.getValue(), entry.getKey(), blockId)
-                    );
+                    throw new InvalidBlockStateException(blockId, entry.getKey(), entry.getValue());
                 }
 
                 state = state.setValue(property, (Comparable) value.get());
@@ -213,15 +204,14 @@ public final class BlockResolver {
     }
 
     /**
-     * Applies {@code components} (block-entity data) from a {@link BlockRef} to the block
-     * entity already placed at the given position. No-op if {@code ref} has no
-     * {@code components}.
+     * Applies {@code components} from a {@link BlockRef} to the block entity at the given
+     * position. No-op if {@code ref} has no {@code components}.
      *
      * @param level The level the position belongs to
-     * @param pos The position of the already-placed block
-     * @param ref The block reference whose {@code components} should be applied
-     * @throws IllegalArgumentException if {@code components} is provided but the block has no
-     * block entity, or if the data is not a valid JSON object / does not load successfully
+     * @param pos   The position of the already-placed block
+     * @param ref   The block reference whose {@code components} should be applied
+     * @throws InvalidParamsException if {@code components} is provided but the block has no
+     *                                block entity, or if the data is not a valid JSON object
      */
     public static void applyComponents(ServerLevel level, BlockPos pos, BlockRef ref) {
         if (ref.components().isEmpty()) return;
@@ -229,26 +219,18 @@ public final class BlockResolver {
     }
 
     /**
-     * Applies {@code components} (block-entity data) to the block entity already placed at
-     * the given position. Shared implementation used both for single-block
-     * {@code components} ({@link #applyComponents(ServerLevel, BlockPos, BlockRef)}) and for
-     * the sparse {@code blockEntities} list in bulk methods like {@code world:chunk/surface/set}.
+     * Applies {@code components} to the block entity at the given position.
      *
-     * <p><b>Uncertain API:</b> loading the data uses {@code BlockEntity#loadWithComponents
-     * (ValueInput)} via a best-guess {@code TagValueInput} construction - see chat history
-     * for details, this may need adjustment for your version.</p>
-     *
-     * @param level The level the position belongs to
-     * @param pos The position of the already-placed block
-     * @param blockId The block's id, used only for error messages
+     * @param level      The level the position belongs to
+     * @param pos        The position of the already-placed block
+     * @param blockId    The block's id, used only for error messages
      * @param components The block-entity data to apply, as JSON
-     * @throws IllegalArgumentException if the block at {@code pos} has no block entity, or if
-     * the data is not a valid JSON object / does not load successfully
+     * @throws InvalidParamsException if the block has no block entity, or the data is invalid
      */
     public static void applyComponents(ServerLevel level, BlockPos pos, String blockId, JsonElement components) {
         BlockEntity blockEntity = level.getBlockEntity(pos);
         if (blockEntity == null) {
-            throw new IllegalArgumentException(
+            throw new InvalidParamsException(
                 "Block '%s' has no block entity, but 'components' was provided".formatted(blockId)
             );
         }
@@ -257,19 +239,21 @@ public final class BlockResolver {
         try {
             nbt = new Dynamic<>(JsonOps.INSTANCE, components).convert(NbtOps.INSTANCE).getValue();
         } catch (Exception e) {
-            throw new IllegalArgumentException(
+            throw new InvalidParamsException(
                 "Invalid 'components' for block '%s': %s".formatted(blockId, e.getMessage())
             );
         }
 
         if (!(nbt instanceof CompoundTag compound)) {
-            throw new IllegalArgumentException("'components' for block '%s' must be a JSON object".formatted(blockId));
+            throw new InvalidParamsException(
+                "'components' for block '%s' must be a JSON object".formatted(blockId)
+            );
         }
 
         try {
             // UNCERTAIN: best-guess at constructing a ValueInput from a CompoundTag - the
             // exact factory class/method name is not reliably known. See chat for details.
-            net.minecraft.world.level.storage.ValueInput input =
+            ValueInput input =
                 net.minecraft.world.level.storage.TagValueInput.create(
                     net.minecraft.util.ProblemReporter.DISCARDING,
                     level.registryAccess(),
@@ -277,7 +261,7 @@ public final class BlockResolver {
                 );
             blockEntity.loadWithComponents(input);
         } catch (Exception e) {
-            throw new IllegalArgumentException(
+            throw new InvalidParamsException(
                 "Invalid 'components' for block '%s': %s".formatted(blockId, e.getMessage())
             );
         }

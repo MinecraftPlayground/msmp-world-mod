@@ -3,8 +3,8 @@ package dev.loat.msmp_world.msmp.exceptions;
 /**
  * Thrown when a method receives invalid or incomplete parameters.
  *
- * <p>Used for method-specific validation errors, such as missing required
- * fields or out-of-range values.</p>
+ * <p>Covers structural validation errors such as wrong array lengths,
+ * missing required fields, or out-of-range index references.</p>
  */
 public class InvalidParamsException extends MSMPException {
 
