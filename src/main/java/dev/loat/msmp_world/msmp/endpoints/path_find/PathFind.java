@@ -2,6 +2,7 @@ package dev.loat.msmp_world.msmp.endpoints.path_find;
 
 import dev.loat.msmp.MSMPNamespace;
 import dev.loat.msmp_world.config.Config;
+import dev.loat.msmp_world.config.files.path_find.PathFindConfig.BoundingBoyType;
 import dev.loat.msmp_world.logging.Logger;
 import dev.loat.msmp_world.msmp.components.BlockResolver;
 import dev.loat.msmp_world.msmp.components.ChunkResolver;
@@ -11,19 +12,24 @@ import dev.loat.msmp_world.msmp.exceptions.EntityNotFoundException;
 import dev.loat.msmp_world.msmp.exceptions.InvalidParamsException;
 import dev.loat.msmp_world.msmp.exceptions.InvalidUUIDException;
 import dev.loat.msmp_world.msmp.exceptions.MSMPException;
-
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ColorParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.AreaEffectCloud;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.Vec2;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -90,7 +96,7 @@ public class PathFind {
                         return new PathFindResponse(params.dimension(), false, List.of());
                     }
 
-                    List<List<Integer>> waypoints = toWaypoints(path);
+                    List<List<Integer>> waypoints = toWaypoints(path, level);
 
                     // Normalize start: the Path's node list doesn't necessarily include the
                     // exact start position as its first entry.
@@ -131,16 +137,16 @@ public class PathFind {
      * malformed, or no matching entity is found
      */
     private static BlockPos resolveTargetPos(MinecraftServer server, PathFindTarget target) {
+        if (target.position().isEmpty() && target.entity().isEmpty()) {
+            throw new InvalidParamsException("PathFind target must specify either 'position' or 'entity'");
+        }
+        
         if (target.position().isPresent()) {
             List<Integer> pos = target.position().get();
             if (pos.size() != 3) {
-                throw new InvalidParamsException("'position' must contain exactly 3 elements [x, y, z]");
+                throw new InvalidParamsException("'position' must contain exactly 3 elements [x, y, z], but got %i".formatted(pos.size()));
             }
             return new BlockPos(pos.get(0), pos.get(1), pos.get(2));
-        }
-
-        if (target.entity().isEmpty()) {
-            throw new InvalidParamsException("PathFind target must specify either 'position' or 'entity'");
         }
 
         EntityRequest entityRef = target.entity().get();
@@ -161,6 +167,7 @@ public class PathFind {
             if (entity == null) {
                 for (ServerLevel level : server.getAllLevels()) {
                     entity = level.getEntity(uuid);
+                    
                     if (entity != null) break;
                 }
             }
@@ -179,7 +186,7 @@ public class PathFind {
     }
 
     /**
-     * Creates a temporary {@link Villager} as a mob profile for the path finder, computes
+     * Creates a temporary {@link Zombie} as a mob profile for the path finder, computes
      * the path, then discards the entity immediately.
      *
      * @param level    The level to path find in
@@ -190,9 +197,12 @@ public class PathFind {
     private static Path computePath(ServerLevel level, BlockPos startPos, BlockPos endPos) {
         ChunkResolver.preloadChunks(level, startPos, endPos);
 
-        Villager entityContainer = EntityType.VILLAGER.create(level, EntitySpawnReason.COMMAND);
+        Zombie entityContainer = EntityType.ZOMBIE.create(level, EntitySpawnReason.COMMAND);
         if (entityContainer == null) return null;
 
+        if (Config.getConfig().pathFind.boundingBoxType == BoundingBoyType.SMALL) {
+            entityContainer.setBaby(true);
+        }
         entityContainer.setNoAi(true);
         entityContainer.setOnGround(true);
         entityContainer.setPos(startPos.getX() + 0.5, startPos.getY(), startPos.getZ() + 0.5);
@@ -217,11 +227,35 @@ public class PathFind {
      * @param path The computed path
      * @return The waypoints in order from start to end
      */
-    private static List<List<Integer>> toWaypoints(Path path) {
+    private static List<List<Integer>> toWaypoints(Path path, ServerLevel level) {
         List<List<Integer>> waypoints = new ArrayList<>();
+
+        
+
         for (int i = 0; i < path.getNodeCount(); i++) {
             Node node = path.getNode(i);
             waypoints.add(List.of(node.x, node.y, node.z));
+
+            if (Config.getConfig().pathFind.debug) {
+                AreaEffectCloud cloud = EntityType.AREA_EFFECT_CLOUD.create(level, EntitySpawnReason.COMMAND);
+                cloud.setRadius(0.5f);
+                cloud.setDuration(200);
+                cloud.setCustomParticle(ColorParticleOption.create(ParticleTypes.ENTITY_EFFECT, 0));
+                cloud.setPos(node.x + 0.5, node.y, node.z + 0.5);
+
+                if (i == 0 || i == path.getNodeCount() - 1) {
+                    cloud.setYRot(90);
+                }
+
+                if (i > 0) {
+                    Vec2 rotation = new Vec3(node.cameFrom.x - node.x, node.cameFrom.y - node.y, node.cameFrom.z - node.z).rotation();
+                    
+                    cloud.setXRot(rotation.x);
+                    cloud.setYRot(rotation.y);
+                }
+
+                level.addFreshEntity(cloud);
+            }
         }
         return waypoints;
     }
