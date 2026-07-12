@@ -28,7 +28,7 @@ public final class ChunkResolver {
     public static int[] resolveChunkCoords(List<Integer> chunk) {
         if (chunk.size() != 2) {
             throw new InvalidParamsException(
-                "'chunk' must contain exactly 2 elements [chunkX, chunkZ], got " + chunk.size()
+                "'chunk' must contain exactly 2 elements [chunkX, chunkZ], but got %d".formatted(chunk.size())
             );
         }
         return new int[] { chunk.get(0), chunk.get(1) };

@@ -85,7 +85,7 @@ public class ChunkSurfaceSet {
 
                     if (blocks.size() != 256) {
                         throw new InvalidParamsException(
-                            "'blocks' must contain exactly 256 entries, got " + blocks.size()
+                            "'blocks' must contain exactly 256 entries, but got %d".formatted(blocks.size())
                         );
                     }
 

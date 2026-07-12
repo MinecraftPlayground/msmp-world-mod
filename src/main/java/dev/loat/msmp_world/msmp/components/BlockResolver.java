@@ -79,7 +79,7 @@ public final class BlockResolver {
     public static BlockPos resolvePosition(List<Integer> position) {
         if (position.size() != 3) {
             throw new InvalidParamsException(
-                "'position' must contain exactly 3 elements [x, y, z], got " + position.size()
+                "'position' must contain exactly 3 elements [x, y, z], but got %d".formatted(position.size())
             );
         }
         return new BlockPos(position.get(0), position.get(1), position.get(2));

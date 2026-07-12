@@ -144,7 +144,7 @@ public class PathFind {
         if (target.position().isPresent()) {
             List<Integer> pos = target.position().get();
             if (pos.size() != 3) {
-                throw new InvalidParamsException("'position' must contain exactly 3 elements [x, y, z], but got %i".formatted(pos.size()));
+                throw new InvalidParamsException("'position' must contain exactly 3 elements [x, y, z], but got %d".formatted(pos.size()));
             }
             return new BlockPos(pos.get(0), pos.get(1), pos.get(2));
         }
