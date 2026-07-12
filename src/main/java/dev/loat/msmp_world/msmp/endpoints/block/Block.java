@@ -4,6 +4,7 @@ import dev.loat.msmp.MSMPNamespace;
 import dev.loat.msmp_world.logging.Logger;
 import dev.loat.msmp_world.msmp.components.BlockPositionRequest;
 import dev.loat.msmp_world.msmp.components.BlockResolver;
+import dev.loat.msmp_world.msmp.exceptions.MSMPException;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -61,7 +62,7 @@ public class Block {
                     BlockState state = level.getBlockState(pos);
 
                     return new BlockResponse(params.dimension(), params.position(), BlockResolver.toBlockRef(level, pos, state));
-                } catch (IllegalArgumentException e) {
+                } catch (MSMPException e) {
                     Logger.warning("world:block - " + e.getMessage());
                     throw e;
                 }

@@ -6,6 +6,7 @@ import dev.loat.msmp_world.msmp.components.BlockEntityRef;
 import dev.loat.msmp_world.msmp.components.BlockResolver;
 import dev.loat.msmp_world.msmp.components.BlockTypeRef;
 import dev.loat.msmp_world.msmp.components.ChunkResolver;
+import dev.loat.msmp_world.msmp.exceptions.MSMPException;
 
 import com.google.gson.JsonElement;
 
@@ -144,7 +145,7 @@ public class ChunkSurface {
                         blocks,
                         blockEntities
                     );
-                } catch (IllegalArgumentException e) {
+                } catch (MSMPException e) {
                     Logger.warning("world:chunk/surface - " + e.getMessage());
                     throw e;
                 }
