@@ -75,6 +75,15 @@ Sets the block at a given position. Returns the confirmed state after placement.
 }
 
 // Response - same shape as world:block
+{
+  "dimension": "minecraft:overworld",
+  "position": [100, 64, 200],
+  "block": {
+    "id": "minecraft:chest",
+    "states": { "facing": "north" },
+    "components": { "Items": [ { "Slot": 0, "id": "minecraft:diamond", "count": 5 } ] }
+  }
+}
 ```
 
 `states` and `components` are both optional. Missing states fall back to the block's default values (matching Vanilla `/setblock` behavior).
